@@ -39,6 +39,11 @@ export interface Order {
   quoted_price: number | null
   technician_id: string | null
   status: 'new' | 'assigned' | 'in_progress' | 'job_done' | 'reviewed' | 'closed'
+  work_done: string | null
+  extra_charges: number | null
+  remarks: string | null
+  final_amount: number | null
+  photo_urls: string[] | null
   created_at: string
   updated_at: string
 }
