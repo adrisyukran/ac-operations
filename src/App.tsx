@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import OrdersPage from './pages/admin/OrdersPage'
 import JobsPage from './pages/technician/JobsPage'
+import ProfilePage from './pages/technician/ProfilePage'
 import DashboardPage from './pages/manager/DashboardPage'
 
 // Placeholder pages for additional routes
@@ -16,22 +17,6 @@ function TechniciansPage() {
         <h3 className="text-lg font-medium text-gray-700 mb-2">Technicians List Coming Soon</h3>
         <p className="text-gray-500 text-sm">
           This page will display all technicians with their status and assignments.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-function ProfilePage() {
-  return (
-    <div>
-      <h2 className="text-2xl font-bold text-gray-800 mb-4">My Profile</h2>
-      <p className="text-gray-600 mb-6">View and update your profile information</p>
-      <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-        <div className="text-4xl mb-4">👤</div>
-        <h3 className="text-lg font-medium text-gray-700 mb-2">Profile Coming Soon</h3>
-        <p className="text-gray-500 text-sm">
-          This page will allow technicians to view and update their profile.
         </p>
       </div>
     </div>
