@@ -7,7 +7,39 @@ export default function OrdersPage() {
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
-  const [nextOrderNo, setNextOrderNo] = useState('ORD-001')
+  const [nextOrderNo, setNextOrderNo] = useState<string | null>(null)
+
+  // Filter state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterServiceType, setFilterServiceType] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
+
+  // Filtered orders
+  const filteredOrders = orders.filter((order) => {
+    // Search filter (order number or customer name)
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      const matchOrderNo = order.order_no?.toLowerCase().includes(query)
+      const matchCustomerName = order.customer_name?.toLowerCase().includes(query)
+      if (!matchOrderNo && !matchCustomerName) return false
+    }
+    // Service type filter
+    if (filterServiceType && order.service_type !== filterServiceType) {
+      return false
+    }
+    // Status filter
+    if (filterStatus && order.status !== filterStatus) {
+      return false
+    }
+    return true
+  })
+
+  // Clear all filters
+  function clearFilters() {
+    setSearchQuery('')
+    setFilterServiceType('')
+    setFilterStatus('')
+  }
 
   // Form state
   const [form, setForm] = useState({
@@ -51,30 +83,45 @@ export default function OrdersPage() {
     setTechnicians(data || [])
   }
 
-  // Generate next order number
-  async function generateOrderNo() {
-    const { data, error } = await supabase
-      .from('orders')
-      .select('order_no')
-      .order('created_at', { ascending: false })
-      .limit(1)
-
-    if (error || !data || data.length === 0) {
-      setNextOrderNo('ORD-001')
+  // Generate next order number based on service type and current date
+  // Format: {PREFIX}{DDMM}-{SEQ} e.g., REP2703-001
+  async function generateOrderNo(serviceType: string) {
+    if (!serviceType) {
+      setNextOrderNo(null)
       return
     }
 
-    const lastOrderNo = data[0].order_no
-    const lastNum = parseInt(lastOrderNo.replace('ORD-', ''), 10)
-    const nextNum = lastNum + 1
-    setNextOrderNo(`ORD-${String(nextNum).padStart(3, '0')}`)
+    try {
+      // Call the database function to get the next order number
+      const { data, error } = await supabase.rpc('get_next_order_number', {
+        p_service_type: serviceType,
+      })
+
+      if (error || !data) {
+        console.error('Error generating order number:', error)
+        // Fallback: generate a basic order number
+        const prefix = serviceType.substring(0, 3).toUpperCase()
+        const now = new Date()
+        const dateStr = String(now.getDate()).padStart(2, '0') + String(now.getMonth() + 1).padStart(2, '0')
+        setNextOrderNo(`${prefix}${dateStr}-001`)
+        return
+      }
+
+      setNextOrderNo(data)
+    } catch (err) {
+      console.error('Error generating order number:', err)
+      const prefix = serviceType.substring(0, 3).toUpperCase()
+      const now = new Date()
+      const dateStr = String(now.getDate()).padStart(2, '0') + String(now.getMonth() + 1).padStart(2, '0')
+      setNextOrderNo(`${prefix}${dateStr}-001`)
+    }
   }
 
   // Load data on mount
   useEffect(() => {
     async function loadData() {
       setLoading(true)
-      await Promise.all([fetchOrders(), fetchTechnicians(), generateOrderNo()])
+      await Promise.all([fetchOrders(), fetchTechnicians()])
       setLoading(false)
     }
     loadData()
@@ -88,10 +135,22 @@ export default function OrdersPage() {
   // Handle form submit
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
+    
+    if (!form.service_type) {
+      alert('Please select a service type')
+      return
+    }
+
     setSubmitting(true)
 
+    // Generate order number at submission time to handle concurrency
+    let orderNumber = nextOrderNo
+    if (!orderNumber) {
+      orderNumber = await generateOrderNumberSync(form.service_type)
+    }
+
     const orderData = {
-      order_no: nextOrderNo,
+      order_no: orderNumber,
       customer_name: form.customer_name,
       customer_phone: form.customer_phone || null,
       customer_address: form.customer_address || null,
@@ -122,8 +181,33 @@ export default function OrdersPage() {
       technician_id: '',
     })
 
-    await Promise.all([fetchOrders(), generateOrderNo()])
+    await Promise.all([fetchOrders(), generateOrderNo(form.service_type)])
     setSubmitting(false)
+  }
+
+  // Synchronous version of generateOrderNo for use in handleSubmit
+  async function generateOrderNumberSync(serviceType: string): Promise<string> {
+    try {
+      const { data, error } = await supabase.rpc('get_next_order_number', {
+        p_service_type: serviceType,
+      })
+
+      if (error || !data) {
+        console.error('Error generating order number:', error)
+        const prefix = serviceType.substring(0, 3).toUpperCase()
+        const now = new Date()
+        const dateStr = String(now.getDate()).padStart(2, '0') + String(now.getMonth() + 1).padStart(2, '0')
+        return `${prefix}${dateStr}-001`
+      }
+
+      return data
+    } catch (err) {
+      console.error('Error generating order number:', err)
+      const prefix = serviceType.substring(0, 3).toUpperCase()
+      const now = new Date()
+      const dateStr = String(now.getDate()).padStart(2, '0') + String(now.getMonth() + 1).padStart(2, '0')
+      return `${prefix}${dateStr}-001`
+    }
   }
 
   // Get status badge styles
@@ -145,12 +229,12 @@ export default function OrdersPage() {
   }
 
   return (
-    <div>
+    <div className="w-full min-w-0">
       <h2 className="text-2xl font-bold text-gray-800 mb-4">Orders</h2>
       <p className="text-gray-600 mb-6">Manage and track all service orders</p>
 
       {/* Order Form */}
-      <div className="bg-white rounded-lg shadow p-6 mb-8">
+      <div className="bg-white rounded-lg shadow p-4 md:p-6 mb-8">
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Create New Order</h3>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -159,10 +243,11 @@ export default function OrdersPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">Order Number</label>
               <input
                 type="text"
-                value={nextOrderNo}
+                value={nextOrderNo || 'Select service type to generate'}
                 readOnly
                 className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100 text-gray-600 cursor-not-allowed"
               />
+              <p className="text-xs text-gray-500 mt-1">Auto-generated based on service type and date</p>
             </div>
 
             {/* Customer Name */}
@@ -194,11 +279,20 @@ export default function OrdersPage() {
 
             {/* Service Type */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Service Type</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Service Type *</label>
               <select
                 name="service_type"
                 value={form.service_type}
-                onChange={handleChange}
+                onChange={(e) => {
+                  handleChange(e)
+                  // Generate order number when service type is selected
+                  if (e.target.value) {
+                    generateOrderNo(e.target.value)
+                  } else {
+                    setNextOrderNo(null)
+                  }
+                }}
+                required
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Select type...</option>
@@ -273,7 +367,7 @@ export default function OrdersPage() {
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? 'Creating...' : 'Create Order'}
             </button>
@@ -282,50 +376,111 @@ export default function OrdersPage() {
       </div>
 
       {/* Orders List */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
+        <div className="px-4 md:px-6 py-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-800">All Orders</h3>
+        </div>
+
+        {/* Filter Bar */}
+        <div className="px-4 md:px-6 py-4 bg-gray-50 border-b border-gray-200">
+          <div className="flex flex-col md:flex-row gap-3">
+            {/* Search Input */}
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search by order number or customer name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+            </div>
+
+            {/* Service Type Filter */}
+            <select
+              value={filterServiceType}
+              onChange={(e) => setFilterServiceType(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-[140px]"
+            >
+              <option value="">All Services</option>
+              <option value="repair">Repair</option>
+              <option value="service">Service</option>
+              <option value="installation">Installation</option>
+            </select>
+
+            {/* Status Filter */}
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm min-w-[140px]"
+            >
+              <option value="">All Status</option>
+              <option value="new">New</option>
+              <option value="assigned">Assigned</option>
+              <option value="in_progress">In Progress</option>
+              <option value="job_done">Job Done</option>
+              <option value="reviewed">Reviewed</option>
+              <option value="closed">Closed</option>
+            </select>
+
+            {/* Clear Filters Button */}
+            {(searchQuery || filterServiceType || filterStatus) && (
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-gray-500 text-sm font-medium"
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
         </div>
 
         {loading ? (
           <div className="p-8 text-center text-gray-500">Loading orders...</div>
         ) : orders.length === 0 ? (
           <div className="p-8 text-center text-gray-500">No orders yet. Create your first order above.</div>
+        ) : filteredOrders.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">No orders match your filters.</div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order No</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Technician</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.order_no}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{order.customer_name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{order.customer_phone || '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {(order as any).technicians?.name || '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
-                        {formatStatus(order.status)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(order.created_at).toLocaleDateString('en-MY')}
-                    </td>
+          <>
+            {/* Results count */}
+            <div className="px-4 md:px-6 py-2 text-sm text-gray-500 bg-gray-50">
+              Showing {filteredOrders.length} of {orders.length} orders
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[600px]">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order No</th>
+                    <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                    <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden sm:table-cell">Phone</th>
+                    <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Technician</th>
+                    <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Date</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {filteredOrders.map((order) => (
+                    <tr key={order.id} className="hover:bg-gray-50">
+                      <td className="px-3 md:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{order.order_no}</td>
+                      <td className="px-3 md:px-6 py-4 whitespace-nowrap text-sm text-gray-700">{order.customer_name}</td>
+                      <td className="px-3 md:px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden sm:table-cell">{order.customer_phone || '-'}</td>
+                      <td className="px-3 md:px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden md:table-cell">
+                        {(order as any).technicians?.name || '-'}
+                      </td>
+                      <td className="px-3 md:px-6 py-4 whitespace-nowrap">
+                        <span className={`px-2 md:px-3 py-1 rounded-full text-xs font-medium ${getStatusBadge(order.status)}`}>
+                          {formatStatus(order.status)}
+                        </span>
+                      </td>
+                      <td className="px-3 md:px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
+                        {new Date(order.created_at).toLocaleDateString('en-MY')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
