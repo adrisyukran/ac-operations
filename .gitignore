@@ -2,3 +2,7 @@
 .env
 #Dependencies
 /node_modules
+/dist
+/dist/assets
+/dist/assets
+dist/assets/index-C0JOMCMp.css
