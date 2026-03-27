@@ -1,4 +1,5 @@
 import { ReactNode, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { UserRole } from '../lib/supabase'
 
@@ -41,13 +42,16 @@ function getNavItems(role: UserRole): NavItem[] {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { user, switchRole, availableRoles } = useAuth()
+  const navigate = useNavigate()
+  const { user, switchRole, availableRoles, currentRole } = useAuth()
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
   if (!user) return null
 
-  const navItems = getNavItems(user.role)
+  // Use currentRole derived from URL path, fallback to user.role
+  const activeRole = currentRole || user.role
+  const navItems = getNavItems(activeRole)
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -76,7 +80,7 @@ export default function Layout({ children }: LayoutProps) {
                 className="flex items-center gap-2 px-4 py-2 bg-blue-700 rounded-lg hover:bg-blue-800 transition"
               >
                 <span className="text-sm">👤 {user.name}</span>
-                <span className="text-xs bg-blue-900 px-2 py-1 rounded">{user.role}</span>
+                <span className="text-xs bg-blue-900 px-2 py-1 rounded">{activeRole}</span>
                 <span className="text-xs">▼</span>
               </button>
 
@@ -94,13 +98,13 @@ export default function Layout({ children }: LayoutProps) {
                           setIsRoleDropdownOpen(false)
                         }}
                         className={`w-full text-left px-4 py-2 text-sm transition ${
-                          user.role === role
+                          activeRole === role
                             ? 'bg-blue-50 text-blue-700 font-medium'
                             : 'text-gray-700 hover:bg-gray-100'
                         }`}
                       >
                         {role.charAt(0).toUpperCase() + role.slice(1)}
-                        {user.role === role && ' ✓'}
+                        {activeRole === role && ' ✓'}
                       </button>
                     ))}
                   </div>
@@ -122,7 +126,7 @@ export default function Layout({ children }: LayoutProps) {
                     key={role}
                     onClick={() => switchRole(role)}
                     className={`px-3 py-1 rounded-lg text-sm font-medium transition ${
-                      user.role === role
+                      activeRole === role
                         ? 'bg-white text-blue-700'
                         : 'bg-blue-700 text-white hover:bg-blue-800'
                     }`}
@@ -145,13 +149,13 @@ export default function Layout({ children }: LayoutProps) {
               <ul className="p-2 space-y-1">
                 {navItems.map((item) => (
                   <li key={item.path}>
-                    <a
-                      href={item.path}
-                      className="flex items-center gap-3 px-4 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition"
+                    <button
+                      onClick={() => navigate(item.path)}
+                      className="w-full flex items-center gap-3 px-4 py-2 rounded-lg text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition"
                     >
                       <span>{item.icon}</span>
                       <span className="font-medium">{item.label}</span>
-                    </a>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -159,8 +163,8 @@ export default function Layout({ children }: LayoutProps) {
           </aside>
 
           {/* Main Content */}
-          <main className="flex-1">
-            <div className="bg-white rounded-lg shadow p-6">
+          <main className="flex-1 min-w-0">
+            <div className="bg-white rounded-lg shadow p-4 md:p-6 min-w-0">
               {children}
             </div>
           </main>
@@ -172,13 +176,13 @@ export default function Layout({ children }: LayoutProps) {
         <ul className="flex justify-around py-2">
           {navItems.map((item) => (
             <li key={item.path}>
-              <a
-                href={item.path}
+              <button
+                onClick={() => navigate(item.path)}
                 className="flex flex-col items-center px-4 py-2 text-gray-600 hover:text-blue-600 transition"
               >
                 <span className="text-xl mb-1">{item.icon}</span>
                 <span className="text-xs font-medium">{item.label}</span>
-              </a>
+              </button>
             </li>
           ))}
         </ul>
