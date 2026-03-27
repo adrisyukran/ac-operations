@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, ReactNode } from 'react'
+import { createContext, useContext, useState, ReactNode, useEffect } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { User, UserRole } from '../lib/supabase'
 
 // Mock users data from database seed
@@ -51,26 +52,65 @@ interface AuthContextType {
   user: User | null
   switchRole: (role: UserRole) => void
   availableRoles: UserRole[]
+  currentRole: UserRole | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const navigate = useNavigate()
+  const location = useLocation()
+  
   // Default to admin user
   const [user, setUser] = useState<User | null>(MOCK_USERS[0])
+  
+  // Current role derived from URL path
+  const [currentRole, setCurrentRole] = useState<UserRole | null>(null)
+  
+  // Update currentRole based on URL path
+  useEffect(() => {
+    const path = location.pathname
+    console.log('[AuthContext] useEffect running, path:', path)
+    if (path.startsWith('/admin')) {
+      setCurrentRole('admin')
+    } else if (path.startsWith('/manager')) {
+      setCurrentRole('manager')
+    } else if (path.startsWith('/technician')) {
+      setCurrentRole('technician')
+    }
+  }, [location.pathname])
 
   const switchRole = (role: UserRole) => {
+    console.log('[AuthContext] switchRole called with:', role)
     // Find the first user with the selected role
     const userWithRole = MOCK_USERS.find(u => u.role === role)
     if (userWithRole) {
+      console.log('[AuthContext] Setting user to:', userWithRole.name, 'role:', userWithRole.role)
       setUser(userWithRole)
+      // Also explicitly set currentRole to prevent timing issues during navigation
+      setCurrentRole(role)
+      // Navigate to the role's default route
+      switch (role) {
+        case 'admin':
+          console.log('[AuthContext] Navigating to /admin/orders')
+          navigate('/admin/orders')
+          break
+        case 'manager':
+          console.log('[AuthContext] Navigating to /manager/dashboard')
+          navigate('/manager/dashboard')
+          break
+        case 'technician':
+          console.log('[AuthContext] Navigating to /technician/jobs')
+          navigate('/technician/jobs')
+          break
+      }
     }
   }
 
   const availableRoles: UserRole[] = ['admin', 'manager', 'technician']
 
   return (
-    <AuthContext.Provider value={{ user, switchRole, availableRoles }}>
+    <AuthContext.Provider value={{ user, switchRole, availableRoles, currentRole }}>
       {children}
     </AuthContext.Provider>
   )
