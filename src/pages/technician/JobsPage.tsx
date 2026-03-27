@@ -5,7 +5,7 @@ import { supabase, Order } from '../../lib/supabase'
 type ViewMode = 'list' | 'detail'
 
 export default function JobsPage() {
-  const { user } = useAuth()
+  const { user, currentRole } = useAuth()
   const [jobs, setJobs] = useState<Order[]>([])
   const [selectedJob, setSelectedJob] = useState<Order | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('list')
@@ -23,9 +23,10 @@ export default function JobsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch jobs assigned to current technician
+  // Depend on currentRole to ensure refetch when role context changes during navigation
   useEffect(() => {
     fetchJobs()
-  }, [user])
+  }, [user, currentRole])
 
   const fetchJobs = async () => {
     if (!user?.technician_id) {
