@@ -54,23 +54,10 @@ function ReportsPage() {
   )
 }
 
-// Home page that redirects based on role
+// Home page - redirect to admin orders by default
+// Role switching is handled by AuthContext.switchRole which navigates directly
 function HomePage() {
-  const { user } = useAuth()
-  
-  if (!user) return null
-  
-  // Redirect to appropriate page based on role
-  switch (user.role) {
-    case 'admin':
-      return <Navigate to="/admin/orders" replace />
-    case 'technician':
-      return <Navigate to="/technician/jobs" replace />
-    case 'manager':
-      return <Navigate to="/manager/dashboard" replace />
-    default:
-      return <Navigate to="/admin/orders" replace />
-  }
+  return <Navigate to="/admin/orders" replace />
 }
 
 function AppRoutes() {
