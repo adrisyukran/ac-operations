@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { Order, Technician } from '../../lib/supabase'
+import { generateWhatsAppLink } from '../../lib/whatsapp'
 
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([])
@@ -56,7 +57,7 @@ export default function OrdersPage() {
   async function fetchOrders() {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, technicians(name)')
+      .select('*, technicians(id, name, phone)')
       .order('created_at', { ascending: false })
 
     if (error) {
@@ -456,6 +457,7 @@ export default function OrdersPage() {
                     <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">Technician</th>
                     <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden lg:table-cell">Date</th>
+                    <th className="px-3 md:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
@@ -474,6 +476,38 @@ export default function OrdersPage() {
                       </td>
                       <td className="px-3 md:px-6 py-4 whitespace-nowrap text-sm text-gray-500 hidden lg:table-cell">
                         {new Date(order.created_at).toLocaleDateString('en-MY')}
+                      </td>
+                      <td className="px-3 md:px-6 py-4 whitespace-nowrap text-sm">
+                        <div className="flex flex-wrap gap-1">
+                          {/* WhatsApp Technician Button */}
+                          {(order as any).technicians?.phone && (
+                            <a
+                              href={generateWhatsAppLink(
+                                (order as any).technicians.phone,
+                                `Hi ${(order as any).technicians.name}, you have a new job assignment!\nOrder No: ${order.order_no}\nCustomer: ${order.customer_name}\nAddress: ${order.customer_address || 'N/A'}\nProblem: ${order.problem_description || 'N/A'}\nPlease confirm receipt.`
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+                            >
+                              📱 Tech
+                            </a>
+                          )}
+                          {/* WhatsApp Customer Button */}
+                          {order.customer_phone && (
+                            <a
+                              href={generateWhatsAppLink(
+                                order.customer_phone,
+                                `Hi ${order.customer_name}, your AC service has been assigned!\nOrder No: ${order.order_no}\nTechnician: ${(order as any).technicians?.name || 'TBD'}\nWe will contact you soon to schedule an appointment.`
+                              )}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-2 py-1 bg-green-600 text-white text-xs rounded hover:bg-green-700"
+                            >
+                              📱 Customer
+                            </a>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
