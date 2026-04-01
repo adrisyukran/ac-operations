@@ -26,7 +26,8 @@ const TECHNICIAN_NAV: NavItem[] = [
 const MANAGER_NAV: NavItem[] = [
   { label: 'Dashboard', path: '/manager/dashboard', icon: '📊' },
   { label: 'Reports', path: '/manager/reports', icon: '📈' },
-  { label: 'AI Query', path: '/manager/ai-query', icon: '🤖' }
+  { label: 'AI Query', path: '/manager/ai-query', icon: '🤖' },
+  { label: 'AI Features', path: '/manager/ai-features', icon: '✨' }
 ]
 
 function getNavItems(role: UserRole): NavItem[] {
