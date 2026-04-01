@@ -278,15 +278,7 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {/* Navigation Hint */}
-      <div className="mt-4 text-center">
-        <a
-          href="/technician/jobs"
-          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-        >
-          ← Back to My Jobs
-        </a>
-      </div>
+      
     </div>
   )
 }
