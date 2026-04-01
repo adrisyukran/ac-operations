@@ -45,7 +45,7 @@ function getNavItems(role: UserRole): NavItem[] {
 
 export default function Layout({ children }: LayoutProps) {
   const navigate = useNavigate()
-  const { user, switchRole, availableRoles, currentRole } = useAuth()
+  const { user, switchRole, availableRoles, currentRole, logout } = useAuth()
   const [isRoleDropdownOpen, setIsRoleDropdownOpen] = useState(false)
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
 
@@ -75,43 +75,55 @@ export default function Layout({ children }: LayoutProps) {
               <span className="text-xl">☰</span>
             </button>
 
-            {/* Role Switcher (Desktop) */}
-            <div className="hidden md:block relative">
-              <button
-                onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-700 rounded-lg hover:bg-blue-800 transition"
-              >
-                <span className="text-sm">👤 {user.name}</span>
-                <span className="text-xs bg-blue-900 px-2 py-1 rounded">{activeRole}</span>
-                <span className="text-xs">▼</span>
-              </button>
+            {/* Role Switcher & User Actions (Desktop) */}
+            <div className="hidden md:flex items-center gap-3">
+              {/* Role Switcher Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setIsRoleDropdownOpen(!isRoleDropdownOpen)}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-700 rounded-lg hover:bg-blue-800 transition"
+                >
+                  <span className="text-sm">👤 {user.name}</span>
+                  <span className="text-xs bg-blue-900 px-2 py-1 rounded">{activeRole}</span>
+                  <span className="text-xs">▼</span>
+                </button>
 
-              {isRoleDropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl z-50">
-                  <div className="py-1">
-                    <div className="px-4 py-2 text-xs text-gray-500 font-semibold">
-                      Switch Role
+                {isRoleDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-xl z-50">
+                    <div className="py-1">
+                      <div className="px-4 py-2 text-xs text-gray-500 font-semibold">
+                        Switch Role
+                      </div>
+                      {availableRoles.map((role) => (
+                        <button
+                          key={role}
+                          onClick={() => {
+                            switchRole(role)
+                            setIsRoleDropdownOpen(false)
+                          }}
+                          className={`w-full text-left px-4 py-2 text-sm transition ${
+                            activeRole === role
+                              ? 'bg-blue-50 text-blue-700 font-medium'
+                              : 'text-gray-700 hover:bg-gray-100'
+                          }`}
+                        >
+                          {role.charAt(0).toUpperCase() + role.slice(1)}
+                          {activeRole === role && ' ✓'}
+                        </button>
+                      ))}
                     </div>
-                    {availableRoles.map((role) => (
-                      <button
-                        key={role}
-                        onClick={() => {
-                          switchRole(role)
-                          setIsRoleDropdownOpen(false)
-                        }}
-                        className={`w-full text-left px-4 py-2 text-sm transition ${
-                          activeRole === role
-                            ? 'bg-blue-50 text-blue-700 font-medium'
-                            : 'text-gray-700 hover:bg-gray-100'
-                        }`}
-                      >
-                        {role.charAt(0).toUpperCase() + role.slice(1)}
-                        {activeRole === role && ' ✓'}
-                      </button>
-                    ))}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
+
+              {/* Logout Button - Inline with role switcher */}
+              <button
+                onClick={logout}
+                className="px-3 py-2 text-sm bg-red-600 hover:bg-red-700 rounded-lg transition"
+                title="Logout"
+              >
+                🚪 Logout
+              </button>
             </div>
           </div>
 
