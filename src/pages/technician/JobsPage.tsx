@@ -272,14 +272,16 @@ Thank you for your valued feedback!`
                 {/* WhatsApp Action Buttons */}
                 {job.customer_phone && (
                   <div className="flex gap-2 mt-3">
-                    <a
-                      href={getAppointmentWhatsAppLink(job)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 flex items-center justify-center gap-1 bg-green-500 text-white py-2 px-3 rounded-lg text-xs font-medium active:bg-green-600"
-                    >
-                      📱 Appointment
-                    </a>
+                    {job.status !== 'job_done' && job.status !== 'reviewed' && (
+                      <a
+                        href={getAppointmentWhatsAppLink(job)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 flex items-center justify-center gap-1 bg-green-500 text-white py-2 px-3 rounded-lg text-xs font-medium active:bg-green-600"
+                      >
+                        📱 Appointment
+                      </a>
+                    )}
                     {(job.status === 'job_done' || job.status === 'reviewed') && (
                       <a
                         href={getFeedbackWhatsAppLink(job)}
@@ -388,14 +390,16 @@ Thank you for your valued feedback!`
           {/* WhatsApp Action Buttons */}
           {selectedJob.customer_phone && (
             <div className="space-y-2">
-              <a
-                href={getAppointmentWhatsAppLink(selectedJob)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full bg-green-500 text-white py-3 rounded-lg font-medium active:bg-green-600"
-              >
-                📱 Schedule Appointment
-              </a>
+              {selectedJob.status !== 'job_done' && selectedJob.status !== 'reviewed' && (
+                <a
+                  href={getAppointmentWhatsAppLink(selectedJob)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 w-full bg-green-500 text-white py-3 rounded-lg font-medium active:bg-green-600"
+                >
+                  📱 Schedule Appointment
+                </a>
+              )}
               {(selectedJob.status === 'job_done' || selectedJob.status === 'reviewed') && (
                 <a
                   href={getFeedbackWhatsAppLink(selectedJob)}
