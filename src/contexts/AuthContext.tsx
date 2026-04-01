@@ -2,6 +2,15 @@ import { createContext, useContext, useState, ReactNode, useEffect } from 'react
 import { useNavigate, useLocation } from 'react-router-dom'
 import { User, UserRole } from '../lib/supabase'
 
+// Hardcoded assessor credentials
+const ASSESSOR_CREDENTIALS = {
+  id: 'admin',
+  password: "diN2'3;r;R4N"
+}
+
+// Session storage key for authentication state
+const SESSION_AUTH_KEY = 'ac_ops_authenticated'
+
 // Mock users data from database seed
 const MOCK_USERS: User[] = [
   {
@@ -53,6 +62,9 @@ interface AuthContextType {
   switchRole: (role: UserRole) => void
   availableRoles: UserRole[]
   currentRole: UserRole | null
+  isAuthenticated: boolean
+  login: (id: string, password: string) => boolean
+  logout: () => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -67,6 +79,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Current role derived from URL path
   const [currentRole, setCurrentRole] = useState<UserRole | null>(null)
   
+  // Authentication state - initialized from sessionStorage
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(SESSION_AUTH_KEY) === 'true'
+    }
+    return false
+  })
+
   // Update currentRole based on URL path
   useEffect(() => {
     const path = location.pathname
@@ -107,10 +127,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const login = (id: string, password: string): boolean => {
+    console.log('[AuthContext] Login attempt with id:', id)
+    
+    // Check against hardcoded credentials
+    if (id === ASSESSOR_CREDENTIALS.id && password === ASSESSOR_CREDENTIALS.password) {
+      console.log('[AuthContext] Login successful')
+      setIsAuthenticated(true)
+      sessionStorage.setItem(SESSION_AUTH_KEY, 'true')
+      return true
+    }
+    
+    console.log('[AuthContext] Login failed - invalid credentials')
+    return false
+  }
+
+  const logout = (): void => {
+    console.log('[AuthContext] Logout called')
+    setIsAuthenticated(false)
+    sessionStorage.removeItem(SESSION_AUTH_KEY)
+    navigate('/login', { replace: true })
+  }
+
   const availableRoles: UserRole[] = ['admin', 'manager', 'technician']
 
   return (
-    <AuthContext.Provider value={{ user, switchRole, availableRoles, currentRole }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      switchRole, 
+      availableRoles, 
+      currentRole,
+      isAuthenticated,
+      login,
+      logout
+    }}>
       {children}
     </AuthContext.Provider>
   )
