@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { askAIAssistant } from '../../lib/aiAssistant'
+import { askAIAssistant, checkAIStatus } from '../../lib/aiAssistant'
 
 interface ChatMessage {
   id: string
@@ -30,7 +30,17 @@ export default function AIQueryPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [aiOnline, setAiOnline] = useState<boolean | null>(null)
+  const [useAI, setUseAI] = useState(true)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Check AI status on mount
+  useEffect(() => {
+    checkAIStatus().then((status) => {
+      setAiOnline(status.available)
+      setUseAI(status.available)
+    })
+  }, [])
 
   // Welcome message on mount
   useEffect(() => {
@@ -65,7 +75,7 @@ export default function AIQueryPage() {
       setIsLoading(true)
 
       try {
-        const response = await askAIAssistant(question.trim())
+        const response = await askAIAssistant(question.trim(), { forceOffline: !useAI })
         const assistantMessage: ChatMessage = {
           id: generateId(),
           type: 'assistant',
@@ -103,7 +113,34 @@ export default function AIQueryPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Page Title */}
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">🤖 AI Operations Assistant</h1>
+      <h1 className="text-2xl font-bold text-gray-900 mb-4">🤖 AI Operations Assistant</h1>
+
+      {/* AI Status Bar */}
+      <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 rounded-lg mb-4">
+        {aiOnline === null ? (
+          <span className="text-sm text-gray-500">Checking AI status...</span>
+        ) : (
+          <>
+            <span className={`h-2.5 w-2.5 rounded-full ${aiOnline ? 'bg-green-500' : 'bg-red-500'}`}></span>
+            <span className="text-sm text-gray-600">
+              {aiOnline ? 'AI Online — Responses enhanced with AI' : 'AI Offline — Using template-based responses'}
+            </span>
+            <div className="flex items-center gap-2 ml-auto">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useAI}
+                  onChange={(e) => setUseAI(e.target.checked)}
+                  disabled={!aiOnline}
+                  className="sr-only peer"
+                />
+                <div className={`w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${aiOnline ? 'peer-checked:bg-blue-600' : ''} ${!aiOnline ? 'opacity-50 cursor-not-allowed' : ''}`}></div>
+              </label>
+              <span className="text-sm text-gray-600">🤖 AI</span>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Chat Container */}
       <div className="flex-1 bg-white rounded-lg shadow flex flex-col overflow-hidden">

@@ -371,14 +371,14 @@ async function enhanceWithAI(question: string, rawData: string): Promise<string>
   }
 
   try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
+        model: 'openai/gpt-oss-20b',
         messages: [
           {
             role: 'system',
@@ -420,7 +420,7 @@ async function enhanceWithAI(question: string, rawData: string): Promise<string>
  * Main orchestrator function for the AI Assistant.
  * Takes a user's question, parses it, queries the database, and returns a formatted response.
  */
-export async function askAIAssistant(question: string): Promise<string> {
+export async function askAIAssistant(question: string, options?: { forceOffline?: boolean }): Promise<string> {
   const parsed = parseQuery(question)
   let rawResponse: string
 
@@ -443,13 +443,47 @@ export async function askAIAssistant(question: string): Promise<string> {
 
   // If OpenAI key available, enhance the response
   const openAIKey = import.meta.env.VITE_OPENAI_API_KEY
-  if (openAIKey) {
+  if (openAIKey && !options?.forceOffline) {
     try {
       return await enhanceWithAI(question, rawResponse)
-    } catch {
+    } catch (error) {
+      console.error('OpenAI enhancement failed:', error)
       return rawResponse // Fallback to template
     }
   }
 
   return rawResponse
+}
+
+/**
+ * Check if AI is available and working.
+ * Makes a lightweight API call to verify connectivity.
+ */
+export async function checkAIStatus(): Promise<{ available: boolean; provider: string }> {
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY
+  if (!apiKey) {
+    return { available: false, provider: 'none' }
+  }
+
+  try {
+    const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'openai/gpt-oss-20b',
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1
+      })
+    })
+
+    if (response.ok) {
+      return { available: true, provider: 'OpenAI (nano-gpt)' }
+    }
+    return { available: false, provider: 'none' }
+  } catch {
+    return { available: false, provider: 'none' }
+  }
 }
