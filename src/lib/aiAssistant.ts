@@ -2,8 +2,9 @@
  * AI Assistant Orchestrator
  * Part of Phase 6: AI Operations Query feature.
  * 
- * Receives user questions, parses them, queries Supabase for data,
- * and formats human-readable responses.
+ * Two-Phase AI Processing:
+ * Phase 1: AI parses natural language question → structured parameters
+ * Phase 2: Query database → AI formats natural language response
  */
 
 import { supabase } from './supabase'
@@ -27,13 +28,209 @@ interface OrderInfo {
   technician_id: string | null
 }
 
+/**
+ * Structured query parameters returned by AI parsing (Phase 1)
+ */
+interface AIQueryParams {
+  intent: 'list_jobs' | 'count_jobs' | 'top_technician' | 'revenue' | 'unknown'
+  technicianName: string | null
+  dateRange: 'today' | 'this_week' | 'last_week' | 'this_month' | 'all_time'
+  serviceType: 'repair' | 'service' | 'installation' | null
+  reasoning: string // Explanation of how the AI interpreted the question
+}
+
+// ============================================================================
+// DATABASE SCHEMA CONTEXT (for AI prompts)
+// ============================================================================
+
+const DATABASE_SCHEMA = `
+Database Tables:
+
+1. technicians
+   - id (UUID, primary key)
+   - name (TEXT) - values: "Ali", "John", "Bala", "Yusoff"
+   - phone (TEXT)
+   - branch_id (TEXT)
+   - is_active (BOOLEAN)
+
+2. orders
+   - id (UUID, primary key)
+   - order_no (TEXT, unique) - format: "REP2703-001"
+   - customer_name (TEXT)
+   - customer_phone (TEXT)
+   - customer_address (TEXT)
+   - problem_description (TEXT)
+   - service_type (TEXT) - values: "repair", "service", "installation"
+   - quoted_price (NUMERIC)
+   - technician_id (UUID, foreign key → technicians.id)
+   - status (TEXT) - values: "new", "assigned", "in_progress", "job_done", "reviewed", "closed"
+   - work_done (TEXT) - description of work completed
+   - extra_charges (NUMERIC)
+   - remarks (TEXT)
+   - final_amount (NUMERIC) - quoted_price + extra_charges
+   - photo_urls (TEXT[])
+   - created_at (TIMESTAMPTZ)
+   - updated_at (TIMESTAMPTZ)
+
+Intent Types:
+- list_jobs: User wants to see a list of specific jobs/orders
+- count_jobs: User wants to count number of jobs
+- top_technician: User wants to know which technician performed best
+- revenue: User wants to know total revenue/earnings
+- unknown: Question doesn't match supported intents
+`
+
+const EXAMPLE_QUESTIONS = `
+Example interpretations:
+
+Q: "What jobs did Ali complete last week?"
+{
+  "intent": "list_jobs",
+  "technicianName": "Ali",
+  "dateRange": "last_week",
+  "serviceType": null,
+  "reasoning": "User wants list of jobs for technician Ali, filtered to last week"
+}
+
+Q: "How many jobs were completed today?"
+{
+  "intent": "count_jobs",
+  "technicianName": null,
+  "dateRange": "today",
+  "serviceType": null,
+  "reasoning": "User wants count of all jobs completed today"
+}
+
+Q: "Which technician completed the most jobs this week?"
+{
+  "intent": "top_technician",
+  "technicianName": null,
+  "dateRange": "this_week",
+  "serviceType": null,
+  "reasoning": "User wants to identify top performer this week"
+}
+
+Q: "Show me all repair jobs for John"
+{
+  "intent": "list_jobs",
+  "technicianName": "John",
+  "dateRange": "all_time",
+  "serviceType": "repair",
+  "reasoning": "User wants list of repair jobs for John across all time"
+}
+
+Q: "What's the revenue from cleaning services this month?"
+{
+  "intent": "revenue",
+  "technicianName": null,
+  "dateRange": "this_month",
+  "serviceType": "service",
+  "reasoning": "User wants total revenue from service/cleaning jobs this month"
+}
+`
+
+// ============================================================================
+// PHASE 1: AI PARSING
+// ============================================================================
+
+/**
+ * Uses AI to parse the user's question into structured parameters.
+ * Falls back to regex-based parsing if AI is unavailable.
+ */
+async function parseWithAI(question: string, useAI: boolean): Promise<ParsedQuery> {
+  if (!useAI) {
+    // Fallback to regex-based parsing
+    return parseQuery(question)
+  }
+
+  const apiKey = import.meta.env.VITE_OPENAI_API_KEY
+  if (!apiKey) {
+    // Fallback to regex-based parsing
+    return parseQuery(question)
+  }
+
+  try {
+    const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'nvidia/nemotron-3-super-120b-a12b',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a query interpreter for an AC service operations database.
+Your task is to parse user questions into structured parameters for database queries.
+
+${DATABASE_SCHEMA}
+
+Output format: Return ONLY valid JSON (no markdown, no explanation).
+The JSON must have this exact structure:
+{
+  "intent": "list_jobs" | "count_jobs" | "top_technician" | "revenue" | "unknown",
+  "technicianName": "Ali" | "John" | "Bala" | "Yusoff" | null,
+  "dateRange": "today" | "this_week" | "last_week" | "this_month" | "all_time",
+  "serviceType": "repair" | "service" | "installation" | null,
+  "reasoning": "Brief explanation of interpretation"
+}
+
+Rules:
+- If no technician mentioned, set technicianName to null
+- If no date specified, set dateRange to "all_time"
+- Map "cleaning", "maintenance" to serviceType "service"
+- Map "install" to serviceType "installation"
+- If question doesn't match any intent, set intent to "unknown"
+- technicianName must be one of: Ali, John, Bala, Yusoff (case-insensitive match)
+
+${EXAMPLE_QUESTIONS}`,
+          },
+          {
+            role: 'user',
+            content: question,
+          },
+        ],
+        max_tokens: 300,
+        temperature: 0.1, // Low temperature for consistent structured output
+      }),
+    })
+
+    if (!response.ok) {
+      console.error('AI parsing failed:', response.status)
+      return parseQuery(question) // Fallback
+    }
+
+    const data = await response.json()
+    
+    if (data.choices && data.choices[0] && data.choices[0].message) {
+      const content = data.choices[0].message.content.trim()
+      
+      // Parse the JSON response
+      // Remove any markdown formatting if present
+      const jsonStr = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim()
+      const parsed = JSON.parse(jsonStr) as AIQueryParams
+
+      // Convert to ParsedQuery format
+      return {
+        intent: parsed.intent,
+        technicianName: parsed.technicianName,
+        dateRange: parsed.dateRange === 'all_time' ? 'unknown' : parsed.dateRange,
+        serviceType: parsed.serviceType || 'unknown',
+      }
+    }
+
+    return parseQuery(question) // Fallback
+  } catch (error) {
+    console.error('Error in AI parsing:', error)
+    return parseQuery(question) // Fallback
+  }
+}
+
 // ============================================================================
 // DATE RANGE LABEL HELPER
 // ============================================================================
 
-/**
- * Converts a DateRange enum value to a human-readable label.
- */
 function getDateRangeLabel(dateRange: DateRange): string {
   switch (dateRange) {
     case 'today':
@@ -51,20 +248,15 @@ function getDateRangeLabel(dateRange: DateRange): string {
 }
 
 // ============================================================================
-// QUERY FUNCTIONS
+// DATABASE QUERY FUNCTIONS
 // ============================================================================
 
-/**
- * Fetches completed jobs for a specific technician.
- * For 'list_jobs' intent when technician name is specified.
- */
 async function fetchJobsByTechnician(parsed: ParsedQuery): Promise<string> {
   try {
     if (!parsed.technicianName) {
       return 'Please specify a technician name.'
     }
 
-    // Look up technician by name
     const { data: technician, error: techError } = await supabase
       .from('technicians')
       .select('id, name')
@@ -75,7 +267,6 @@ async function fetchJobsByTechnician(parsed: ParsedQuery): Promise<string> {
       return `Technician "${parsed.technicianName}" not found.`
     }
 
-    // Build query for completed jobs
     const { gte, lt } = getDateRangeFilter(parsed.dateRange)
     
     let query = supabase
@@ -90,6 +281,9 @@ async function fetchJobsByTechnician(parsed: ParsedQuery): Promise<string> {
     }
     if (lt) {
       query = query.lt('updated_at', lt)
+    }
+    if (parsed.serviceType && parsed.serviceType !== 'unknown') {
+      query = query.eq('service_type', parsed.serviceType)
     }
 
     const { data: jobs, error: jobsError } = await query
@@ -120,17 +314,12 @@ async function fetchJobsByTechnician(parsed: ParsedQuery): Promise<string> {
   }
 }
 
-/**
- * Counts completed jobs.
- * For 'count_jobs' intent.
- */
 async function fetchJobCount(parsed: ParsedQuery): Promise<string> {
   try {
     const { gte, lt } = getDateRangeFilter(parsed.dateRange)
     const dateLabel = getDateRangeLabel(parsed.dateRange)
     const dateLabelText = dateLabel ? ` ${dateLabel}` : ' '
 
-    // If technician specified, look up their ID first
     let technicianFilter: string | null = null
     if (parsed.technicianName) {
       const { data: technician, error: techError } = await supabase
@@ -159,6 +348,9 @@ async function fetchJobCount(parsed: ParsedQuery): Promise<string> {
     if (technicianFilter) {
       query = query.eq('technician_id', technicianFilter)
     }
+    if (parsed.serviceType && parsed.serviceType !== 'unknown') {
+      query = query.eq('service_type', parsed.serviceType)
+    }
 
     const { count, error } = await query
 
@@ -170,7 +362,6 @@ async function fetchJobCount(parsed: ParsedQuery): Promise<string> {
     const jobCount = count || 0
 
     if (parsed.technicianName && technicianFilter) {
-      // Look up technician name again for the response
       const { data: technician } = await supabase
         .from('technicians')
         .select('name')
@@ -188,17 +379,12 @@ async function fetchJobCount(parsed: ParsedQuery): Promise<string> {
   }
 }
 
-/**
- * Finds the technician with the most completed jobs.
- * For 'top_technician' intent.
- */
 async function fetchTopTechnician(parsed: ParsedQuery): Promise<string> {
   try {
     const { gte, lt } = getDateRangeFilter(parsed.dateRange)
     const dateLabel = getDateRangeLabel(parsed.dateRange)
     const dateLabelText = dateLabel ? ` ${dateLabel}` : ''
 
-    // Query all completed jobs with technician info
     let query = supabase
       .from('orders')
       .select('technician_id')
@@ -209,6 +395,9 @@ async function fetchTopTechnician(parsed: ParsedQuery): Promise<string> {
     }
     if (lt) {
       query = query.lt('updated_at', lt)
+    }
+    if (parsed.serviceType && parsed.serviceType !== 'unknown') {
+      query = query.eq('service_type', parsed.serviceType)
     }
 
     const { data: jobs, error } = await query
@@ -222,7 +411,6 @@ async function fetchTopTechnician(parsed: ParsedQuery): Promise<string> {
       return `No completed jobs found${dateLabelText}.`
     }
 
-    // Count jobs per technician
     const technicianCounts: Record<string, number> = {}
     for (const job of jobs) {
       if (job.technician_id) {
@@ -230,7 +418,6 @@ async function fetchTopTechnician(parsed: ParsedQuery): Promise<string> {
       }
     }
 
-    // Find the technician with most jobs
     let topTechnicianId: string | null = null
     let maxCount = 0
     for (const [techId, count] of Object.entries(technicianCounts)) {
@@ -244,7 +431,6 @@ async function fetchTopTechnician(parsed: ParsedQuery): Promise<string> {
       return `No completed jobs found${dateLabelText}.`
     }
 
-    // Get technician name
     const { data: technician, error: techError } = await supabase
       .from('technicians')
       .select('name')
@@ -262,17 +448,12 @@ async function fetchTopTechnician(parsed: ParsedQuery): Promise<string> {
   }
 }
 
-/**
- * Calculates total revenue from completed jobs.
- * For 'revenue' intent.
- */
 async function fetchRevenue(parsed: ParsedQuery): Promise<string> {
   try {
     const { gte, lt } = getDateRangeFilter(parsed.dateRange)
     const dateLabel = getDateRangeLabel(parsed.dateRange)
     const dateLabelText = dateLabel ? ` ${dateLabel}` : ''
 
-    // If technician specified, look up their ID first
     let technicianFilter: string | null = null
     if (parsed.technicianName) {
       const { data: technician, error: techError } = await supabase
@@ -302,6 +483,9 @@ async function fetchRevenue(parsed: ParsedQuery): Promise<string> {
     if (technicianFilter) {
       query = query.eq('technician_id', technicianFilter)
     }
+    if (parsed.serviceType && parsed.serviceType !== 'unknown') {
+      query = query.eq('service_type', parsed.serviceType)
+    }
 
     const { data: orders, error } = await query
 
@@ -314,19 +498,16 @@ async function fetchRevenue(parsed: ParsedQuery): Promise<string> {
       return `No revenue data found${dateLabelText}.`
     }
 
-    // Sum up final_amount
     const totalRevenue = orders.reduce<number>((sum, order) => {
       return sum + (Number(order.final_amount) || 0)
     }, 0)
 
-    // Format with thousand separators
     const formattedAmount = totalRevenue.toLocaleString('en-MY', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })
 
     if (parsed.technicianName && technicianFilter) {
-      // Get technician name for response
       const { data: technician } = await supabase
         .from('technicians')
         .select('name')
@@ -344,28 +525,27 @@ async function fetchRevenue(parsed: ParsedQuery): Promise<string> {
   }
 }
 
-/**
- * Handles unknown or unrecognized queries.
- * For 'unknown' intent.
- */
-async function handleUnknown(parsed: ParsedQuery): Promise<string> {
+async function handleUnknown(question: string): Promise<string> {
   return `I'm not sure what you're asking. Try questions like:
 • What jobs did Ali complete last week?
 • How many jobs were completed today?
-• Which technician completed the most jobs this week?`
+• Which technician completed the most jobs this week?
+• Show me revenue for this month`
 }
 
 // ============================================================================
-// OPENAI ENHANCEMENT (OPTIONAL)
+// PHASE 2: AI RESPONSE FORMATTING
 // ============================================================================
 
 /**
- * Enhances the raw response using OpenAI API (if available).
- * Uses raw fetch() to call the API - no OpenAI npm package needed.
+ * Uses AI to format the raw database response into a natural language answer.
  */
-async function enhanceWithAI(question: string, rawData: string): Promise<string> {
+async function formatWithAI(question: string, rawData: string, useAI: boolean): Promise<string> {
+  if (!useAI) {
+    return rawData
+  }
+
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY
-  
   if (!apiKey) {
     return rawData
   }
@@ -378,15 +558,29 @@ async function enhanceWithAI(question: string, rawData: string): Promise<string>
         'Authorization': `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-20b',
+        model: 'nvidia/nemotron-3-super-120b-a12b',
         messages: [
           {
             role: 'system',
-            content: 'You are an AC operations assistant. Given the user\'s question and the raw data, provide a clear, concise answer. Keep the same factual data but make it sound natural.',
+            content: `You are an AC operations assistant.
+The user asked a question and we retrieved data from the database.
+Format the data into a clear, conversational answer.
+
+Rules:
+- Keep it concise but informative
+- Use the same facts from the data
+- If the data shows a list, present it as a numbered or bulleted list
+- If the data shows a number/count, highlight it
+- Add context where helpful (e.g., "Here's what I found...")
+- If no data was found, say so in a friendly way
+
+Example:
+Data: "Technician Ali completed 3 jobs last week:\nREP001 – Gas refill\nREP002 – Cleaning\nREP003 – Repair"
+Response: "Here's what I found for Ali last week — they completed 3 jobs:\n1. REP001 – Gas refill\n2. REP002 – Cleaning\n3. REP003 – Repair"`,
           },
           {
             role: 'user',
-            content: `Question: ${question}\n\nData: ${rawData}`,
+            content: `User Question: ${question}\n\nDatabase Data:\n${rawData}`,
           },
         ],
         max_tokens: 500,
@@ -395,8 +589,8 @@ async function enhanceWithAI(question: string, rawData: string): Promise<string>
     })
 
     if (!response.ok) {
-      console.error('OpenAI API error:', response.status)
-      return rawData // Fallback to raw response
+      console.error('AI formatting failed:', response.status)
+      return rawData
     }
 
     const data = await response.json()
@@ -405,10 +599,10 @@ async function enhanceWithAI(question: string, rawData: string): Promise<string>
       return data.choices[0].message.content.trim()
     }
 
-    return rawData // Fallback if response format unexpected
+    return rawData
   } catch (error) {
-    console.error('Error calling OpenAI API:', error)
-    return rawData // Fallback on any error
+    console.error('Error in AI formatting:', error)
+    return rawData
   }
 }
 
@@ -417,11 +611,29 @@ async function enhanceWithAI(question: string, rawData: string): Promise<string>
 // ============================================================================
 
 /**
- * Main orchestrator function for the AI Assistant.
- * Takes a user's question, parses it, queries the database, and returns a formatted response.
+ * Main orchestrator function - Two-Phase AI Processing.
+ * 
+ * Phase 1: Parse question with AI (or regex fallback)
+ * Phase 2: Query database → Format response with AI (or template fallback)
  */
-export async function askAIAssistant(question: string, options?: { forceOffline?: boolean }): Promise<string> {
-  const parsed = parseQuery(question)
+export async function askAIAssistant(
+  question: string,
+  options?: { forceOffline?: boolean; useAI?: boolean }
+): Promise<string> {
+  // Determine if we should use AI
+  const useAI = !options?.forceOffline && !!import.meta.env.VITE_OPENAI_API_KEY
+  
+  if (useAI) {
+    console.log('🤖 Using Two-Phase AI Processing')
+  } else {
+    console.log('📋 Using template-based processing')
+  }
+
+  // Phase 1: Parse the question
+  const parsed = await parseWithAI(question, useAI)
+  console.log('📊 Parsed query:', parsed)
+
+  // Execute the appropriate query based on intent
   let rawResponse: string
 
   switch (parsed.intent) {
@@ -438,17 +650,20 @@ export async function askAIAssistant(question: string, options?: { forceOffline?
       rawResponse = await fetchRevenue(parsed)
       break
     default:
-      rawResponse = await handleUnknown(parsed)
+      rawResponse = await handleUnknown(question)
   }
 
-  // If OpenAI key available, enhance the response
-  const openAIKey = import.meta.env.VITE_OPENAI_API_KEY
-  if (openAIKey && !options?.forceOffline) {
+  console.log('📦 Raw response:', rawResponse)
+
+  // Phase 2: Format the response (AI enhancement)
+  if (useAI && parsed.intent !== 'unknown') {
     try {
-      return await enhanceWithAI(question, rawResponse)
+      const formattedResponse = await formatWithAI(question, rawResponse, useAI)
+      console.log('✨ AI formatted response:', formattedResponse)
+      return formattedResponse
     } catch (error) {
-      console.error('OpenAI enhancement failed:', error)
-      return rawResponse // Fallback to template
+      console.error('AI formatting failed, using raw response:', error)
+      return rawResponse
     }
   }
 
@@ -457,7 +672,6 @@ export async function askAIAssistant(question: string, options?: { forceOffline?
 
 /**
  * Check if AI is available and working.
- * Makes a lightweight API call to verify connectivity.
  */
 export async function checkAIStatus(): Promise<{ available: boolean; provider: string }> {
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY
@@ -473,7 +687,7 @@ export async function checkAIStatus(): Promise<{ available: boolean; provider: s
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'openai/gpt-oss-20b',
+        model: 'nvidia/nemotron-3-super-120b-a12b',
         messages: [{ role: 'user', content: 'ping' }],
         max_tokens: 1
       })
