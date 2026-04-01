@@ -15,19 +15,6 @@ import {
   DateRange,
 } from './aiQueryParser'
 
-// ============================================================================
-// TYPE DEFINITIONS
-// ============================================================================
-
-interface OrderInfo {
-  id: string
-  order_no: string
-  work_done: string | null
-  service_type: string | null
-  final_amount: number | null
-  technician_id: string | null
-}
-
 /**
  * Chat message type for conversation history
  */
@@ -552,7 +539,7 @@ async function fetchRevenue(parsed: ParsedQuery): Promise<string> {
   }
 }
 
-async function handleUnknown(question: string): Promise<string> {
+async function handleUnknown(_question: string): Promise<string> {
   return `I'm not sure what you're asking. Try questions like:
 • What jobs did Ali complete last week?
 • How many jobs were completed today?
