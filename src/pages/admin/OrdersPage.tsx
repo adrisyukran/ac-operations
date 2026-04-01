@@ -19,7 +19,20 @@ export default function OrdersPage() {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
-  const [editForm, setEditForm] = useState<Partial<Order>>({})
+  const [editForm, setEditForm] = useState<{
+    customer_name?: string
+    customer_phone?: string
+    customer_address?: string
+    problem_description?: string
+    service_type?: string
+    quoted_price?: string
+    technician_id?: string
+    status?: string
+    work_done?: string
+    extra_charges?: string
+    remarks?: string
+    final_amount?: string
+  }>({})
   const [isDeleting, setIsDeleting] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
@@ -287,13 +300,13 @@ export default function OrdersPage() {
       customer_address: selectedOrder.customer_address || '',
       problem_description: selectedOrder.problem_description || '',
       service_type: selectedOrder.service_type || '',
-      quoted_price: selectedOrder.quoted_price?.toString() || '',
+      quoted_price: selectedOrder.quoted_price?.toString() ?? '',
       technician_id: selectedOrder.technician_id || '',
       status: selectedOrder.status,
       work_done: selectedOrder.work_done || '',
-      extra_charges: selectedOrder.extra_charges?.toString() || '',
+      extra_charges: selectedOrder.extra_charges?.toString() ?? '',
       remarks: selectedOrder.remarks || '',
-      final_amount: selectedOrder.final_amount?.toString() || '',
+      final_amount: selectedOrder.final_amount?.toString() ?? '',
     })
     setIsEditMode(true)
   }
@@ -310,18 +323,18 @@ export default function OrdersPage() {
     setIsDeleting(true)
 
     const updateData: Partial<Order> = {
-      customer_name: editForm.customer_name,
-      customer_phone: editForm.customer_phone || null,
-      customer_address: editForm.customer_address || null,
-      problem_description: editForm.problem_description || null,
-      service_type: editForm.service_type || null,
-      quoted_price: editForm.quoted_price ? parseFloat(editForm.quoted_price as string) : null,
-      technician_id: editForm.technician_id || null,
+      customer_name: editForm.customer_name || undefined,
+      customer_phone: editForm.customer_phone || undefined,
+      customer_address: editForm.customer_address || undefined,
+      problem_description: editForm.problem_description || undefined,
+      service_type: editForm.service_type || undefined,
+      quoted_price: editForm.quoted_price ? parseFloat(editForm.quoted_price) : null,
+      technician_id: editForm.technician_id || undefined,
       status: editForm.status as Order['status'],
-      work_done: editForm.work_done || null,
-      extra_charges: editForm.extra_charges ? parseFloat(editForm.extra_charges as string) : null,
-      remarks: editForm.remarks || null,
-      final_amount: editForm.final_amount ? parseFloat(editForm.final_amount as string) : null,
+      work_done: editForm.work_done || undefined,
+      extra_charges: editForm.extra_charges ? parseFloat(editForm.extra_charges) : null,
+      remarks: editForm.remarks || undefined,
+      final_amount: editForm.final_amount ? parseFloat(editForm.final_amount) : null,
     }
 
     const { error } = await supabase
