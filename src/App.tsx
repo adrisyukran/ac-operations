@@ -6,6 +6,7 @@ import JobsPage from './pages/technician/JobsPage'
 import ProfilePage from './pages/technician/ProfilePage'
 import DashboardPage from './pages/manager/DashboardPage'
 import AIQueryPage from './pages/manager/AIQueryPage'
+import AIFeaturesPage from './pages/manager/AIFeaturesPage'
 
 // Placeholder pages for additional routes
 function TechniciansPage() {
@@ -64,6 +65,7 @@ function AppRoutes() {
       <Route path="/manager/dashboard" element={<Layout><DashboardPage /></Layout>} />
       <Route path="/manager/reports" element={<Layout><ReportsPage /></Layout>} />
       <Route path="/manager/ai-query" element={<Layout><AIQueryPage /></Layout>} />
+      <Route path="/manager/ai-features" element={<Layout><AIFeaturesPage /></Layout>} />
       
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
