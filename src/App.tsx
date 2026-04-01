@@ -1,10 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { AuthProvider } from './contexts/AuthContext'
 import Layout from './components/Layout'
 import OrdersPage from './pages/admin/OrdersPage'
 import JobsPage from './pages/technician/JobsPage'
 import ProfilePage from './pages/technician/ProfilePage'
 import DashboardPage from './pages/manager/DashboardPage'
+import AIQueryPage from './pages/manager/AIQueryPage'
 
 // Placeholder pages for additional routes
 function TechniciansPage() {
@@ -62,6 +63,7 @@ function AppRoutes() {
       {/* Manager routes */}
       <Route path="/manager/dashboard" element={<Layout><DashboardPage /></Layout>} />
       <Route path="/manager/reports" element={<Layout><ReportsPage /></Layout>} />
+      <Route path="/manager/ai-query" element={<Layout><AIQueryPage /></Layout>} />
       
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
