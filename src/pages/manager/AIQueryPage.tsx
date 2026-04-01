@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { askAIAssistant, checkAIStatus } from '../../lib/aiAssistant'
+import { askAIAssistant, checkAIStatus, ChatMessage as AIChatMessage } from '../../lib/aiAssistant'
 
 interface ChatMessage {
   id: string
@@ -75,7 +75,12 @@ export default function AIQueryPage() {
       setIsLoading(true)
 
       try {
-        const response = await askAIAssistant(question.trim(), { forceOffline: !useAI })
+        // Build conversation history for context (exclude welcome message)
+        const history: AIChatMessage[] = messages
+          .filter((m) => !(m.type === 'assistant' && m.content.includes('👋')))
+          .map((m) => ({ type: m.type, content: m.content }))
+
+        const response = await askAIAssistant(question.trim(), { forceOffline: !useAI, history })
         const assistantMessage: ChatMessage = {
           id: generateId(),
           type: 'assistant',

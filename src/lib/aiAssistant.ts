@@ -29,6 +29,14 @@ interface OrderInfo {
 }
 
 /**
+ * Chat message type for conversation history
+ */
+export interface ChatMessage {
+  type: 'user' | 'assistant'
+  content: string
+}
+
+/**
  * Structured query parameters returned by AI parsing (Phase 1)
  */
 interface AIQueryParams {
@@ -137,7 +145,7 @@ Q: "What's the revenue from cleaning services this month?"
  * Uses AI to parse the user's question into structured parameters.
  * Falls back to regex-based parsing if AI is unavailable.
  */
-async function parseWithAI(question: string, useAI: boolean): Promise<ParsedQuery> {
+async function parseWithAI(question: string, useAI: boolean, history?: ChatMessage[]): Promise<ParsedQuery> {
   if (!useAI) {
     // Fallback to regex-based parsing
     return parseQuery(question)
@@ -147,6 +155,20 @@ async function parseWithAI(question: string, useAI: boolean): Promise<ParsedQuer
   if (!apiKey) {
     // Fallback to regex-based parsing
     return parseQuery(question)
+  }
+
+  // Build conversation context from history
+  const contextMessages: { role: string; content: string }[] = []
+  
+  if (history && history.length > 0) {
+    // Add conversation context as a reference
+    const contextStr = history
+      .map((msg) => `${msg.type === 'user' ? 'User' : 'Assistant'}: ${msg.content}`)
+      .join('\n')
+    contextMessages.push({
+      role: 'system',
+      content: `Previous conversation context:\n${contextStr}\n\nUse this context to understand follow-up questions. For example, if the user asks "How much revenue for this order?", "this order" refers to the order mentioned in the previous conversation.`
+    })
   }
 
   try {
@@ -163,6 +185,10 @@ async function parseWithAI(question: string, useAI: boolean): Promise<ParsedQuer
             role: 'system',
             content: `You are a query interpreter for an AC service operations database.
 Your task is to parse user questions into structured parameters for database queries.
+
+IMPORTANT: The user may ask follow-up questions referring to previous conversation context.
+For example, if the previous answer mentioned order "INS2703-001" and the user asks "How much revenue for this order?",
+you should interpret "this order" as referring to that specific order.
 
 ${DATABASE_SCHEMA}
 
@@ -186,6 +212,7 @@ Rules:
 
 ${EXAMPLE_QUESTIONS}`,
           },
+          ...contextMessages,
           {
             role: 'user',
             content: question,
@@ -539,8 +566,9 @@ async function handleUnknown(question: string): Promise<string> {
 
 /**
  * Uses AI to format the raw database response into a natural language answer.
+ * Includes conversation history for contextual follow-up responses.
  */
-async function formatWithAI(question: string, rawData: string, useAI: boolean): Promise<string> {
+async function formatWithAI(question: string, rawData: string, useAI: boolean, history?: ChatMessage[]): Promise<string> {
   if (!useAI) {
     return rawData
   }
@@ -548,6 +576,20 @@ async function formatWithAI(question: string, rawData: string, useAI: boolean): 
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY
   if (!apiKey) {
     return rawData
+  }
+
+  // Build conversation context messages from history
+  const contextMessages: { role: string; content: string }[] = []
+  
+  if (history && history.length > 0) {
+    // Add previous conversation as context (last 10 messages to keep token count manageable)
+    const recentHistory = history.slice(-10)
+    for (const msg of recentHistory) {
+      contextMessages.push({
+        role: msg.type === 'user' ? 'user' : 'assistant',
+        content: msg.content,
+      })
+    }
   }
 
   try {
@@ -562,9 +604,13 @@ async function formatWithAI(question: string, rawData: string, useAI: boolean): 
         messages: [
           {
             role: 'system',
-            content: `You are an AC operations assistant.
+            content: `You are an AC operations assistant having a conversation with a manager.
 The user asked a question and we retrieved data from the database.
 Format the data into a clear, conversational answer.
+
+IMPORTANT: The user may be asking follow-up questions. Use the conversation history to understand context.
+For example, if the previous answer mentioned order "INS2703-001" and the user asks "How much revenue for this order?",
+understand they're asking about that specific order.
 
 Rules:
 - Keep it concise but informative
@@ -573,11 +619,13 @@ Rules:
 - If the data shows a number/count, highlight it
 - Add context where helpful (e.g., "Here's what I found...")
 - If no data was found, say so in a friendly way
+- For follow-up questions, acknowledge the connection to previous context
 
 Example:
 Data: "Technician Ali completed 3 jobs last week:\nREP001 – Gas refill\nREP002 – Cleaning\nREP003 – Repair"
 Response: "Here's what I found for Ali last week — they completed 3 jobs:\n1. REP001 – Gas refill\n2. REP002 – Cleaning\n3. REP003 – Repair"`,
           },
+          ...contextMessages,
           {
             role: 'user',
             content: `User Question: ${question}\n\nDatabase Data:\n${rawData}`,
@@ -618,19 +666,20 @@ Response: "Here's what I found for Ali last week — they completed 3 jobs:\n1. 
  */
 export async function askAIAssistant(
   question: string,
-  options?: { forceOffline?: boolean; useAI?: boolean }
+  options?: { forceOffline?: boolean; useAI?: boolean; history?: ChatMessage[] }
 ): Promise<string> {
   // Determine if we should use AI
   const useAI = !options?.forceOffline && !!import.meta.env.VITE_OPENAI_API_KEY
+  const history = options?.history
   
   if (useAI) {
-    console.log('🤖 Using Two-Phase AI Processing')
+    console.log('🤖 Using Two-Phase AI Processing (with conversation context)')
   } else {
     console.log('📋 Using template-based processing')
   }
 
-  // Phase 1: Parse the question
-  const parsed = await parseWithAI(question, useAI)
+  // Phase 1: Parse the question (with conversation history for context)
+  const parsed = await parseWithAI(question, useAI, history)
   console.log('📊 Parsed query:', parsed)
 
   // Execute the appropriate query based on intent
@@ -655,10 +704,10 @@ export async function askAIAssistant(
 
   console.log('📦 Raw response:', rawResponse)
 
-  // Phase 2: Format the response (AI enhancement)
+  // Phase 2: Format the response (AI enhancement with conversation history)
   if (useAI && parsed.intent !== 'unknown') {
     try {
-      const formattedResponse = await formatWithAI(question, rawResponse, useAI)
+      const formattedResponse = await formatWithAI(question, rawResponse, useAI, history)
       console.log('✨ AI formatted response:', formattedResponse)
       return formattedResponse
     } catch (error) {
