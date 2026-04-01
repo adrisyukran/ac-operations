@@ -1,12 +1,25 @@
+import { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from './contexts/AuthContext'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
+import LoginPage from './pages/LoginPage'
 import OrdersPage from './pages/admin/OrdersPage'
 import JobsPage from './pages/technician/JobsPage'
 import ProfilePage from './pages/technician/ProfilePage'
 import DashboardPage from './pages/manager/DashboardPage'
 import AIQueryPage from './pages/manager/AIQueryPage'
 import AIFeaturesPage from './pages/manager/AIFeaturesPage'
+
+// ProtectedRoute wrapper - redirects to /login if not authenticated
+function ProtectedRoute({ children }: { children: ReactNode }) {
+  const { isAuthenticated } = useAuth()
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />
+  }
+  
+  return <>{children}</>
+}
 
 // Placeholder pages for additional routes
 function TechniciansPage() {
@@ -41,8 +54,7 @@ function ReportsPage() {
   )
 }
 
-// Home page - redirect to admin orders by default
-// Role switching is handled by AuthContext.switchRole which navigates directly
+// Home page - redirect to admin orders by default (after auth check)
 function HomePage() {
   return <Navigate to="/admin/orders" replace />
 }
@@ -50,22 +62,88 @@ function HomePage() {
 function AppRoutes() {
   return (
     <Routes>
-      {/* Home route - redirects based on role */}
-      <Route path="/" element={<HomePage />} />
+      {/* Login route - NO Layout wrapper, NOT protected */}
+      <Route path="/login" element={<LoginPage />} />
+      
+      {/* Protected routes - wrapped with ProtectedRoute and Layout */}
+      <Route 
+        path="/" 
+        element={
+          <ProtectedRoute>
+            <HomePage />
+          </ProtectedRoute>
+        } 
+      />
       
       {/* Admin routes */}
-      <Route path="/admin/orders" element={<Layout><OrdersPage /></Layout>} />
-      <Route path="/admin/technicians" element={<Layout><TechniciansPage /></Layout>} />
+      <Route 
+        path="/admin/orders" 
+        element={
+          <ProtectedRoute>
+            <Layout><OrdersPage /></Layout>
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/admin/technicians" 
+        element={
+          <ProtectedRoute>
+            <Layout><TechniciansPage /></Layout>
+          </ProtectedRoute>
+        } 
+      />
       
       {/* Technician routes */}
-      <Route path="/technician/jobs" element={<Layout><JobsPage /></Layout>} />
-      <Route path="/technician/profile" element={<Layout><ProfilePage /></Layout>} />
+      <Route 
+        path="/technician/jobs" 
+        element={
+          <ProtectedRoute>
+            <Layout><JobsPage /></Layout>
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/technician/profile" 
+        element={
+          <ProtectedRoute>
+            <Layout><ProfilePage /></Layout>
+          </ProtectedRoute>
+        } 
+      />
       
       {/* Manager routes */}
-      <Route path="/manager/dashboard" element={<Layout><DashboardPage /></Layout>} />
-      <Route path="/manager/reports" element={<Layout><ReportsPage /></Layout>} />
-      <Route path="/manager/ai-query" element={<Layout><AIQueryPage /></Layout>} />
-      <Route path="/manager/ai-features" element={<Layout><AIFeaturesPage /></Layout>} />
+      <Route 
+        path="/manager/dashboard" 
+        element={
+          <ProtectedRoute>
+            <Layout><DashboardPage /></Layout>
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/manager/reports" 
+        element={
+          <ProtectedRoute>
+            <Layout><ReportsPage /></Layout>
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/manager/ai-query" 
+        element={
+          <ProtectedRoute>
+            <Layout><AIQueryPage /></Layout>
+          </ProtectedRoute>
+        } 
+      />
+      <Route 
+        path="/manager/ai-features" 
+        element={
+          <ProtectedRoute>
+            <Layout><AIFeaturesPage /></Layout>
+          </ProtectedRoute>
+        } 
+      />
       
       {/* Catch-all redirect */}
       <Route path="*" element={<Navigate to="/" replace />} />
