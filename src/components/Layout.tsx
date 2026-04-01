@@ -149,6 +149,14 @@ export default function Layout({ children }: LayoutProps) {
                   </button>
                 ))}
               </div>
+              <div className="mt-4 pt-4 border-t border-blue-700">
+                <button
+                  onClick={logout}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2 text-sm bg-red-600 hover:bg-red-700 rounded-lg transition"
+                >
+                  🚪 Logout
+                </button>
+              </div>
             </div>
           )}
         </div>
