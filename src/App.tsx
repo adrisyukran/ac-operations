@@ -9,6 +9,7 @@ import ProfilePage from './pages/technician/ProfilePage'
 import DashboardPage from './pages/manager/DashboardPage'
 import AIQueryPage from './pages/manager/AIQueryPage'
 import AIFeaturesPage from './pages/manager/AIFeaturesPage'
+import { Analytics } from "@vercel/analytics/next"
 
 // ProtectedRoute wrapper - redirects to /login if not authenticated
 function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -156,6 +157,7 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <Analytics/>
       </AuthProvider>
     </BrowserRouter>
   )
